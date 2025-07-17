@@ -1,9 +1,11 @@
 
 #include "XThread.h"
+#include "XTask.h"
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <event2/event_compat.h>
+#include <mutex>
 #include <unistd.h>
 #include <event2/event.h>
 #include <iostream>
@@ -19,10 +21,11 @@
 static void NotifyCB(evutil_socket_t fd, short which, void *arg){
     XThread* t = (XThread*)arg;
     
-    bool re = t->ReadNotify();
+    bool re = t->Run();
     if(!re)
         return;
-    std::cout << t->tId_ << ": 线程被唤醒" << std::endl;
+    
+    std::cout << t->tId_ << ": 线程被唤醒，NotifyCB " << std::endl;
 }
 
 XThread::XThread() {
@@ -112,8 +115,10 @@ bool XThread::Notify() {
     return true;
 }
 
+// 接受消息，执行队列中的任务
 bool XThread::ReadNotify() {
     // 整合原来的 EventNotifier::ReadEvent() 功能
+    std::cout << "XThread::ReadNotify" << std::endl;
 #ifdef _WIN32
     char buf;
     if (recv(notifyFds_[0], &buf, 1, 0) == 1) {
@@ -127,6 +132,34 @@ bool XThread::ReadNotify() {
     }
     return false;
 #endif
+}
+
+// 读取消息并执行任务
+bool XThread::Run() {
+    if(!ReadNotify()) return true; 
+
+    std::unique_lock<std::mutex> lk(tasksMutex_);
+    XTask* task = nullptr;
+    if (tasks_.empty()) {
+        return true;
+    }
+    task = tasks_.front(); // 先进先出
+    tasks_.pop_front();
+    lk.unlock();
+    task->Init();
+    return true;
+}
+
+
+// 给线程添加task
+void XThread::AddTask(XTask *task)
+{
+    if(!task)return;
+    task->base_ = base_;
+    
+    // 添加任务的线程可能和执行任务的线程竞争，需要锁
+    std::lock_guard<std::mutex> lk(tasksMutex_);
+    tasks_.push_back(task);
 }
 
 
@@ -145,7 +178,7 @@ bool XThread::Setup() {
         return false;
     }
 
-    if (!ListenNotifier(base_, NotifyCB, this)) {
+    if (!ListenNotifier(base_,NotifyCB, this)) {
         return false;
     }
 

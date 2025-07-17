@@ -34,7 +34,7 @@ class XThread{
 }
 
 class XTask {
-    virtual void Init() = 0; 任务初始化接口
+    virtual void Init() = 0; //任务初始化接口
     struct event_base *base;
     int sock;
 }

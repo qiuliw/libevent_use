@@ -9,10 +9,11 @@
 #include <string>
 #include <unistd.h>
 
+#include "XTask.h"
 #include "XThread.h"
 #include "XTthreadPool.h"
-#include "XTaskImp.h"
-
+#include "XFtpServerCMD.h"
+#
 
 using namespace std;
 
@@ -53,10 +54,14 @@ void event_cb(struct bufferevent *bev,short what, void *ctx){
 // 新连接回调
 void listener_cb(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr * addr, int socklen, void * arg){
     cout << "receive client connected, fd:" << fd << endl;
-    XTask *task = new XTaskImp();
-    XThreadPool::Get()->Dispatch(task);
+
     struct event_base *base = (struct event_base *)arg;
 
+    XTask *task = new XFtpServerCMD();
+    task->sock_ = fd;
+
+    // 派发任务
+    XThreadPool::Get()->Dispatch(task);
     // 用于创建一个套接字事件对象​（bufferevent），它封装了底层的 socket 操作（如读、写、事件回调），并提供了 ​自动缓冲​ 和 ​事件驱动​ 的能力。
     // 对已存在的socket对象进行封装
     // struct bufferevent *bufferevent_socket_new(
@@ -64,15 +69,21 @@ void listener_cb(struct evconnlistener *listener, evutil_socket_t fd, struct soc
     //     evutil_socket_t fd,           // 已存在的 socket 文件描述符
     //     int options                   // 选项标志（如 BEV_OPT_CLOSE_ON_FREE）
     // );
-    struct bufferevent *bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE); // bev 带缓冲区的ev，BEV_OPT_CLOSE_ON_FREE对象释放时关联的socket也会被关闭
-    if(bev == NULL){
-        perror("bufferevent_socket_new");
-        exit(1);
-    }
-    // 设置读写回调、其他事件回调
-    bufferevent_setcb(bev, read_cb, NULL, event_cb, (void*)fd);
-    // 设置监听事件类型
-    bufferevent_enable(bev, EV_READ);
+
+    /*
+        base poll -> listen -> bev
+    */
+
+    // struct bufferevent *bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE); // bev，BEV_OPT_CLOSE_ON_FREE对象释放时关联的socket也会被关闭
+    // if(bev == NULL){
+    //     perror("bufferevent_socket_new");
+    //     exit(1);
+    // }
+    // // 设置读写回调、其他事件回调
+    // bufferevent_setcb(bev, read_cb, NULL, event_cb, (void*)fd);
+    // // 设置监听事件类型
+    // bufferevent_enable(bev, EV_READ);
+
 }
 
 int main(int, char**){

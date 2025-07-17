@@ -1,6 +1,6 @@
 #include "XTthreadPool.h"
 #include "XThread.h"
-
+#include <iostream>
 XThreadPool::XThreadPool() {
 }
 
@@ -52,10 +52,16 @@ XThread* XThreadPool::GetThread()
 // 分发线程
 void XThreadPool::Dispatch(XTask *task)
 {
+    std::cout << "XThreadPool::Dispatch" << std::endl;
     // 轮询
     if(!task) return;
     int tid = (lastThreadId_ + 1) % threadCount_;
     lastThreadId_ = tid;
     XThread* t = threads_[tid];
+
+    t->AddTask(task);
+
     t->Notify(); // 激活线程
 }
+
+// 与muduo不同，这里的新线程不监听连接，只执行任务
